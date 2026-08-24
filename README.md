@@ -7,7 +7,7 @@
 | Raspberry Pi 5 (`192.168.219.156`) | MariaDB 11.4 · Spring backend(:8080) · React frontend(:8082) · MinIO(:9000, 콘솔 :9001 로컬) | `~/RallyTrack/devops` (docker compose) |
 | ml-server (`192.168.219.150`) | FastAPI AI 분석 서버(:8000) | `~/RallyTrack/aiAnalysis-server` (venv + systemd `rallytrack-ai`) |
 
-- **공개 주소: https://app.rallytrack.win** — Cloudflare Tunnel(`rally-proxmox`, 커넥터는 Proxmox 호스트)의 public hostname → `http://192.168.219.156:8082`. 포트 개방 없음, HTTPS는 Cloudflare 엣지가 처리
+- **공개 주소: https://app.rallytrack.win** — Cloudflare Tunnel(`rally-proxmox`)의 public hostname → `http://192.168.219.156:8082`. 포트 개방 없음, HTTPS는 Cloudflare 엣지가 처리. **커넥터 2개(이중화)**: Proxmox 호스트(pve) + Pi의 `rally-cloudflared` 컨테이너 → 한쪽이 꺼져도 웹 접속 유지
 - LAN 직결 주소: `http://192.168.219.156:8082` (큰 영상 업로드는 이쪽으로 — Cloudflare 무료 플랜은 **요청 본문 100MB 제한**이라 100MB 초과 업로드는 도메인 경유 시 실패)
 - presigned URL은 `S3_PUBLIC_ENDPOINT`(현재 `https://app.rallytrack.win`)로 서명되고, frontend nginx가 `/rallytrack-videos/` → MinIO로 프록시 (`pi/nginx-rallytrack.conf`는 호스트 nginx 대안, 현재 미사용)
 - DB에는 스토리지 URL 대신 **object key만 저장** → MinIO↔S3 전환 시 DB 불변

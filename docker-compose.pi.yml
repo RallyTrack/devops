@@ -102,6 +102,19 @@ services:
     mem_limit: 128m
     restart: unless-stopped
 
+  # Cloudflare Tunnel replica — Proxmox 호스트의 커넥터가 꺼져도
+  # app.rallytrack.win 웹 접속을 Pi 단독으로 유지 (동일 터널, 동일 토큰)
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: rally-cloudflared
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - rallytrack-net
+    mem_limit: 128m
+    restart: unless-stopped
+
 volumes:
   db_data:
   minio_data:
