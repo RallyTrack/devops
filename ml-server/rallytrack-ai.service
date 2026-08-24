@@ -1,0 +1,27 @@
+# ml-server용 systemd 유닛
+# 설치: sudo cp rallytrack-ai.service /etc/systemd/system/
+#       sudo systemctl daemon-reload && sudo systemctl enable --now rallytrack-ai
+# 사전 조건:
+#   1) ~/RallyTrack/aiAnalysis-server 에 최신 코드 + tracknetv3/ + weights/stroke/
+#   2) python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#   3) 아래 ANALYSIS_CALLBACK_SECRET 값을 Pi의 devops/.env와 동일하게 교체
+
+[Unit]
+Description=RallyTrack AI Analysis Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=junmin
+WorkingDirectory=/home/junmin/RallyTrack/aiAnalysis-server
+Environment=BACKEND_URL=http://192.168.219.156:8080
+Environment=ANALYSIS_CALLBACK_SECRET=change-me
+# rally-track-analysis-log 채널 Incoming Webhook (비우면 알림 비활성)
+Environment=SLACK_ANALYSIS_WEBHOOK=
+# 라우터가 8000을 포워딩하지 않으므로 0.0.0.0 바인드여도 LAN 전용
+ExecStart=/home/junmin/RallyTrack/aiAnalysis-server/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
