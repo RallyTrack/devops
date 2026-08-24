@@ -1,0 +1,111 @@
+# RallyTrack — Raspberry Pi 5 배포용 compose
+# 사용: docker compose -f docker-compose.pi.yml --env-file .env up -d --build
+# KISIA 프로젝트와 공존: 80(호스트 nginx vhost 공유), 5672/6379/8001/15672 회피
+
+services:
+  db:
+    image: mariadb:11.4
+    container_name: rally-db
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=128M
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: rallytrack
+      MARIADB_USER: rallytrack
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "127.0.0.1:3307:3306"   # 로컬 관리용만, 외부 노출 금지
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - rallytrack-net
+    mem_limit: 600m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: rally-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"             # LAN 노출: presigned URL 직접 접근용 (라우터는 미포워딩)
+      - "127.0.0.1:9001:9001"   # 관리 콘솔 (ssh -L로 접근)
+    volumes:
+      - minio_data:/data
+    networks:
+      - rallytrack-net
+    mem_limit: 512m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ../backend
+    container_name: rally-backend
+    environment:
+      DB_URL: jdbc:mariadb://db:3306/rallytrack?useUnicode=true&characterEncoding=utf8mb4&serverTimezone=Asia/Seoul
+      DB_USERNAME: rallytrack
+      DB_PASSWORD: ${DB_PASSWORD}
+      DDL_AUTO: ${DDL_AUTO:-validate}      # 최초 1회만 update
+      S3_ENDPOINT: http://minio:9000       # 컨테이너 내부 통신용
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT}   # presigned URL 서명용 (브라우저가 여는 주소)
+      S3_AI_ENDPOINT: http://${PI_LAN_IP}:9000    # AI 서버용 presign (LAN 직결, Cloudflare 미경유)
+      S3_PATH_STYLE: "true"
+      S3_BUCKET: rallytrack-videos
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      AI_SERVER_URL: http://${ML_SERVER_LAN_IP}:8000
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      JWT_SECRET: ${JWT_SECRET}
+      ANALYSIS_CALLBACK_SECRET: ${ANALYSIS_CALLBACK_SECRET}
+      SLACK_BACK_WEBHOOK: ${SLACK_BACK_WEBHOOK:-}
+      JAVA_TOOL_OPTIONS: -Xms256m -Xmx768m
+    ports:
+      - "8080:8080"             # LAN 노출: ml-server의 콜백 수신용 (라우터는 미포워딩)
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - rallytrack-net
+    mem_limit: 1200m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/v3/api-docs"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 5
+
+  frontend:
+    build: ../frontend
+    container_name: rally-frontend
+    ports:
+      - "8082:80"               # LAN 노출: http://<Pi IP>:8082 (도메인 도입 시 host nginx vhost 경유로 전환)
+    depends_on:
+      - backend
+    networks:
+      - rallytrack-net
+    mem_limit: 128m
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  minio_data:
+
+networks:
+  rallytrack-net:
+    driver: bridge
