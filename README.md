@@ -1,4 +1,4 @@
-# RallyTrack DevOps — Raspberry Pi 배포
+# RallyTrack DevOps
 
 ## 현재 구성 (2026-08)
 
