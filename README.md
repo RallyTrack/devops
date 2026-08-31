@@ -1,46 +1,75 @@
 # RallyTrack DevOps
 
-## 현재 구성 (2026-08)
+RallyTrack 서비스의 **배포 구성 저장소**입니다. 애플리케이션 코드는 각 서비스 저장소에 있고,
+여기에는 컨테이너 오케스트레이션 · 리버스 프록시 · 서비스 유닛 · 배포 스크립트만 둡니다.
 
-| 노드 | 역할 | 위치 |
+## 서비스 구성
+
+| 서비스 | 역할 | 포트 |
 |---|---|---|
-| Raspberry Pi 5 (`192.168.219.156`) | MariaDB 11.4 · Spring backend(:8080) · React frontend(:8082) · MinIO(:9000, 콘솔 :9001 로컬) | `~/RallyTrack/devops` (docker compose) |
-| ml-server (`192.168.219.150`) | FastAPI AI 분석 서버(:8000) | `~/RallyTrack/aiAnalysis-server` (venv + systemd `rallytrack-ai`) |
+| `frontend` | React SPA (nginx, `/api`는 backend로 프록시) | 8082 |
+| `backend` | Spring Boot API | 8080 |
+| `db` | MariaDB 11.4 | 3307 (로컬 전용) |
+| `minio` | 영상 오브젝트 스토리지 (S3 호환) | 9000 / 콘솔 9001 |
+| `cloudflared` | Cloudflare Tunnel 커넥터 (외부 포트 개방 없이 공개) | — |
+| AI 분석 서버 | FastAPI, 별도 호스트에서 systemd로 구동 | 8000 |
 
-- **공개 주소: https://app.rallytrack.win** — Cloudflare Tunnel(`rally-proxmox`)의 public hostname → `http://192.168.219.156:8082`. 포트 개방 없음, HTTPS는 Cloudflare 엣지가 처리. **커넥터 2개(이중화)**: Proxmox 호스트(pve) + Pi의 `rally-cloudflared` 컨테이너 → 한쪽이 꺼져도 웹 접속 유지
-- LAN 직결 주소: `http://192.168.219.156:8082` (큰 영상 업로드는 이쪽으로 — Cloudflare 무료 플랜은 **요청 본문 100MB 제한**이라 100MB 초과 업로드는 도메인 경유 시 실패)
-- presigned URL은 `S3_PUBLIC_ENDPOINT`(현재 `https://app.rallytrack.win`)로 서명되고, frontend nginx가 `/rallytrack-videos/` → MinIO로 프록시 (`pi/nginx-rallytrack.conf`는 호스트 nginx 대안, 현재 미사용)
-- DB에는 스토리지 URL 대신 **object key만 저장** → MinIO↔S3 전환 시 DB 불변
-- KISIA 프로젝트와 공존: 80/5672/6379/8001/15672 사용하지 않음
+영상은 presigned URL로 직접 업로드/재생하며, DB에는 URL이 아닌 **object key만** 저장합니다.
+따라서 MinIO ↔ S3 전환 시 DB 변경이 없습니다.
 
-## 운영 명령 (Pi)
+## 저장소 구성
 
-```bash
-cd ~/RallyTrack/devops
-docker compose -f docker-compose.pi.yml --env-file .env up -d          # 기동
-docker compose -f docker-compose.pi.yml ps                             # 상태
-docker compose -f docker-compose.pi.yml logs -f backend                # 로그
-docker compose -f docker-compose.pi.yml --env-file .env up -d --build  # 코드 반영
+| 경로 | 설명 |
+|---|---|
+| `docker-compose.yml` | 로컬 개발용 (MySQL, AI 서버 포함 전체 스택) |
+| `docker-compose.pi.yml` | 실서버(Raspberry Pi) 배포용 — 헬스체크 · 메모리 제한 · MinIO · 터널 포함 |
+| `.env.example` | 환경 변수 템플릿 (실제 값은 `.env`, 커밋 금지) |
+| `pi/deploy.sh` | 서버 배포 스크립트 — 각 저장소 pull 후 재빌드 · 재기동 |
+| `pi/nginx-rallytrack.conf` | 호스트 nginx vhost 템플릿 (도메인 직접 연결 시 사용) |
+| `ml-server/deploy-ai.sh` | AI 서버 배포 스크립트 |
+| `ml-server/rallytrack-ai.service` | AI 분석 서버 systemd 유닛 템플릿 |
+
+`backend` / `frontend` / `aiAnalysis-server` 를 이 저장소와 같은 상위 폴더에 두고 clone해야
+compose의 `build:` 상대 경로와 배포 스크립트가 맞습니다.
+
+```
+RallyTrack/
+├── devops/        ← 이 저장소
+├── backend/
+├── frontend/
+└── aiAnalysis-server/
 ```
 
-- 시크릿: `.env` (gitignore, 템플릿은 `.env.example`)
-- 스키마 변경 시: `.env`의 `DDL_AUTO=update`로 1회 기동 → 다시 `validate`
-- DB 백업: 매일 04:20 cron → `~/RallyTrack/backups/` 7일 롤링 (`backup-db.sh`)
-- MinIO 콘솔: `ssh -L 9001:localhost:9001 pi-local` 후 http://localhost:9001
-
-## 운영 명령 (ml-server)
+## 시작하기
 
 ```bash
-sudo systemctl status rallytrack-ai      # 상태
-journalctl -u rallytrack-ai -f           # 분석 로그
-sudo systemctl restart rallytrack-ai     # 재시작 (GPU 드라이버 복구 후에도 이것만)
+cp .env.example .env          # 값 채우기 (시크릿 생성: openssl rand -hex 32)
+
+# 로컬 개발
+docker compose up -d --build
+
+# 서버 최초 기동
+docker compose -f docker-compose.pi.yml --env-file .env up -d --build
+
+# 이후 배포는 스크립트로
+pi/deploy.sh
 ```
 
-- 유닛 템플릿: `ml-server/rallytrack-ai.service` (`ANALYSIS_CALLBACK_SECRET`는 Pi `.env`와 동일 값으로 교체해 설치)
-- 필수 자산: `tracknetv3/`(ckpts 포함), `weights/stroke/` — 레포에 없음, 서버에 직접 배치됨
+상태 확인은 `docker compose -f <compose 파일> ps`, 로그는 `... logs -f backend`.
 
-## 클라우드 복귀 / 도메인 도입
+## 환경 변수
 
-- **S3 복귀**: `.env`에서 `S3_ENDPOINT`·`S3_PUBLIC_ENDPOINT` 비우고 AWS 키 입력, `S3_PATH_STYLE=false` → 재기동. 데이터 이전은 `mc mirror`
-- **AI 위치 이동**: `AI_SERVER_URL`(Pi)과 `BACKEND_URL`(ml-server 유닛) 두 값만 교체
-- **도메인 도입**: `pi/nginx-rallytrack.conf` 설치 + `S3_PUBLIC_ENDPOINT`/`CORS_ALLOWED_ORIGINS`를 도메인으로 교체
+모든 시크릿과 호스트 주소는 `.env`로 주입하며 저장소에 커밋하지 않습니다.
+필요한 키와 설명은 [`.env.example`](.env.example)을 참고하세요.
+스키마 최초 생성 시에만 `DDL_AUTO=update`, 이후에는 `validate`로 되돌립니다.
+
+## 관련 저장소
+
+- [RallyTrack/backend](https://github.com/RallyTrack/backend) — Spring Boot API
+- [RallyTrack/frontend](https://github.com/RallyTrack/frontend) — React 클라이언트
+- [RallyTrack/aiAnalysis-server](https://github.com/RallyTrack/aiAnalysis-server) — FastAPI 분석 서버
+
+---
+
+> 실제 운영 정보(호스트 주소, 백업 · 복구 절차, 장애 대응)는 공개 저장소에 두지 않고
+> 별도 런북으로 관리합니다.

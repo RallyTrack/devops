@@ -7,3 +7,6 @@
 # 혹시 로컬 볼륨을 폴더로 뺐을 경우를 대비해 데이터 폴더 제외
 mysql_data/
 db_data/
+
+# 운영 런북 (로컬 전용)
+RUNBOOK.local.md
