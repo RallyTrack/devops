@@ -39,6 +39,7 @@ jobs:
         run: |
           grep -Fq 'COMPOSE_PROJECT="${RALLYTRACK_COMPOSE_PROJECT:-devops}"' pi/deploy.sh
           test "$(grep -Fc -- '-p "$COMPOSE_PROJECT"' pi/deploy.sh)" = "2"
+          grep -Fq '"http://127.0.0.1/"' docker-compose.pi.yml
       - name: Validate local Compose model
         run: docker compose -f docker-compose.yml config --quiet
       - name: Validate Pi Compose model
