@@ -96,6 +96,9 @@ cloudflared 128 MB입니다. Java heap은 768 MB로 제한됩니다. 이 구성�
 - backend `contextLoads`가 개발자 PC의 MariaDB `localhost:3307`에 연결해 실패했습니다.
   테스트 프로필을 H2(MariaDB 호환 모드)로 분리하고 JWT/S3 테스트 값을 주입해 외부 서비스 없이
   컨텍스트가 올라오도록 수정했습니다.
+- 첫 hosted CI에서는 로컬에서만 존재하는 `application.yml`이 빠지자 JWT 만료시간, CORS, AI URL
+  placeholder가 없어서 다시 실패했습니다. 로컬 파일을 배제한 조건으로 재현한 뒤 테스트 프로필에
+  필요한 설정을 모두 명시하고 같은 조건에서 전체 테스트와 JAR 빌드를 다시 통과시켰습니다.
 - frontend는 `framer-motion`을 직접 선언하지 않은 채 transitive dependency에 의존했습니다.
   npm과 pnpm의 설치 구조 차이에서 빌드가 깨졌고, 이미 직접 의존 중인 `motion/react` 경로로 바꿨습니다.
 - 로컬 sandbox에서 Gradle의 파일 잠금 소켓과 dependency 다운로드가 차단됐습니다. 이는 코드 실패와
