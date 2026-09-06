@@ -66,6 +66,11 @@ runner 사용자는 Pi에서 GitHub 저장소를 fetch하고 Docker를 실행할
 
 Pi 스크립트는 다음 순서로 동작합니다.
 
+운영 데이터 볼륨은 최초 수동 배포 때 만들어진 Compose 프로젝트명 `devops`에 속합니다.
+배포 스크립트도 기본적으로 이 이름을 재사용해 `devops_db_data`와 `devops_minio_data`를
+그대로 연결합니다. 다른 기존 프로젝트명을 사용하는 서버만
+`RALLYTRACK_COMPOSE_PROJECT`로 명시적으로 재정의합니다.
+
 1. 중복 배포를 파일 잠금으로 차단하고, 대상 저장소에 로컬 변경이 있으면 중단합니다.
 2. 기본 브랜치에 포함된 workflow의 검증 SHA인지 확인하고 fast-forward합니다.
 3. Compose 구성을 검사하고 변경 서비스의 이미지만 빌드합니다.
@@ -122,8 +127,8 @@ cloudflared 128 MB입니다. Java heap은 768 MB로 제한됩니다. 이 구성�
 ```bash
 # Pi
 cd /home/junmin/RallyTrack/devops
-docker compose -p rallytrack -f docker-compose.pi.yml --env-file .env ps
-docker compose -p rallytrack -f docker-compose.pi.yml --env-file .env logs --tail=200 backend frontend
+docker compose -p devops -f docker-compose.pi.yml --env-file .env ps
+docker compose -p devops -f docker-compose.pi.yml --env-file .env logs --tail=200 backend frontend
 
 # ML 서버
 systemctl status rallytrack-ai

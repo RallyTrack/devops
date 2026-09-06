@@ -35,6 +35,10 @@ jobs:
       - uses: actions/checkout@v6
       - name: Validate shell syntax
         run: bash -n pi/deploy.sh ml-server/deploy-ai.sh
+      - name: Validate production Compose identity
+        run: |
+          grep -Fq 'COMPOSE_PROJECT="${RALLYTRACK_COMPOSE_PROJECT:-devops}"' pi/deploy.sh
+          test "$(grep -Fc -- '-p "$COMPOSE_PROJECT"' pi/deploy.sh)" = "2"
       - name: Validate local Compose model
         run: docker compose -f docker-compose.yml config --quiet
       - name: Validate Pi Compose model

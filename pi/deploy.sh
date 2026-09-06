@@ -24,6 +24,7 @@ DEFAULT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 DEPLOY_ROOT="${RALLYTRACK_ROOT:-$DEFAULT_ROOT}"
 DEVOPS_DIR="$DEPLOY_ROOT/devops"
 ENV_FILE="${RALLYTRACK_ENV_FILE:-$DEVOPS_DIR/.env}"
+COMPOSE_PROJECT="${RALLYTRACK_COMPOSE_PROJECT:-devops}"
 COMPONENT="${1:-all}"
 EXPECTED_SHA="${2:-}"
 
@@ -184,7 +185,7 @@ rollback() {
     fi
   done
 
-  local compose=(docker compose -p rallytrack -f "$DEVOPS_DIR/docker-compose.pi.yml" --env-file "$ENV_FILE")
+  local compose=(docker compose -p "$COMPOSE_PROJECT" -f "$DEVOPS_DIR/docker-compose.pi.yml" --env-file "$ENV_FILE")
   if [[ "$rebuild_previous" == true ]]; then
     for service in "${BUILT_SERVICES[@]}"; do
       "${compose[@]}" build "$service"
@@ -207,7 +208,7 @@ else
 fi
 ROLLBACK_REQUIRED=true
 
-COMPOSE=(docker compose -p rallytrack -f "$DEVOPS_DIR/docker-compose.pi.yml" --env-file "$ENV_FILE")
+COMPOSE=(docker compose -p "$COMPOSE_PROJECT" -f "$DEVOPS_DIR/docker-compose.pi.yml" --env-file "$ENV_FILE")
 "${COMPOSE[@]}" config --quiet
 
 if [[ "$COMPONENT" != "frontend" ]]; then

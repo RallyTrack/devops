@@ -12,12 +12,12 @@ RallyTrack는 아직 Flyway를 사용하지 않습니다. Pi 배포 스크립트
 cd /home/junmin/RallyTrack/devops
 
 # 먼저 백업
-docker compose -p rallytrack -f docker-compose.pi.yml --env-file .env \
+docker compose -p devops -f docker-compose.pi.yml --env-file .env \
   exec -T db sh -c 'mariadb-dump -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE" videos' \
   > videos-before-analysis-mode.sql
 
 # forward migration
-docker compose -p rallytrack -f docker-compose.pi.yml --env-file .env \
+docker compose -p devops -f docker-compose.pi.yml --env-file .env \
   exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' \
   < db/migrations/20260906_add_video_analysis_mode.sql
 ```
@@ -25,7 +25,7 @@ docker compose -p rallytrack -f docker-compose.pi.yml --env-file .env \
 ## 확인
 
 ```bash
-docker compose -p rallytrack -f docker-compose.pi.yml --env-file .env \
+docker compose -p devops -f docker-compose.pi.yml --env-file .env \
   exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE" -e \
   "SELECT video_id, title, analysis_mode, video_status, upload_date FROM videos ORDER BY video_id DESC LIMIT 20"'
 ```
@@ -39,7 +39,7 @@ docker compose -p rallytrack -f docker-compose.pi.yml --env-file .env \
 앱 롤백 시 새 nullable 컬럼을 남겨둬도 구버전과 호환되므로 자동 롤백은 컬럼을 삭제하지 않습니다.
 
 ```bash
-docker compose -p rallytrack -f docker-compose.pi.yml --env-file .env \
+docker compose -p devops -f docker-compose.pi.yml --env-file .env \
   exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' \
   < db/rollback/20260906_drop_video_analysis_mode.sql
 ```
