@@ -79,6 +79,9 @@ FastAPI import를 확인한 뒤 systemd를 재시작합니다. 헬스 체크 실
 자동 롤백은 Git 코드와 애플리케이션 이미지에만 적용됩니다. MariaDB/MinIO 볼륨은 배포 중 삭제하지
 않지만, 호환되지 않는 DB 스키마 변경은 자동 복구하지 않습니다. 운영 중에는 `DDL_AUTO=validate`를
 유지하고 스키마 변경은 백업, 호환 가능한 선행 migration, 앱 배포, 구버전 제거 순서로 수행해야 합니다.
+`videos.analysis_mode`는 nullable additive migration이라, 컬럼이 없으면 배포 스크립트가 `videos`
+테이블을 백업하고 migration을 적용한 뒤 검증합니다. 실패하면 앱 빌드 전에 중단됩니다.
+구체적인 forward/rollback 절차는 [`../db/README.md`](../db/README.md)에 있습니다.
 
 ## 5. 현재 서버 규모의 트레이드오프
 

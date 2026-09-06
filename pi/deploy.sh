@@ -110,6 +110,56 @@ wait_for_http() {
   fail "$name health check failed: $url"
 }
 
+wait_for_database() {
+  local attempts="${1:-24}"
+  local attempt
+
+  "${COMPOSE[@]}" up -d --no-build db
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    if "${COMPOSE[@]}" exec -T db sh -c \
+      'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE" -e "SELECT 1"' \
+      >/dev/null 2>&1; then
+      log "database readiness check passed"
+      return 0
+    fi
+    sleep 5
+  done
+  fail "database readiness check failed"
+}
+
+ensure_analysis_mode_schema() {
+  local column_count
+  column_count="$("${COMPOSE[@]}" exec -T db sh -c \
+    'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE" -Nse \
+    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '\''videos'\'' AND COLUMN_NAME = '\''analysis_mode'\''"')"
+
+  if [[ "$column_count" == "0" ]]; then
+    local migration="$DEVOPS_DIR/db/migrations/20260906_add_video_analysis_mode.sql"
+    local backup_dir="${RALLYTRACK_DB_BACKUP_DIR:-$DEPLOY_ROOT/backups/db}"
+    local backup_file="$backup_dir/videos-$(date -u +%Y%m%dT%H%M%SZ)-before-analysis-mode.sql"
+    [[ -f "$migration" ]] || fail "analysis-mode migration file is missing"
+    mkdir -p "$backup_dir"
+    chmod 700 "$backup_dir"
+
+    log "backing up videos table before the additive migration"
+    "${COMPOSE[@]}" exec -T db sh -c \
+      'mariadb-dump -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE" videos' \
+      > "$backup_file"
+    chmod 600 "$backup_file"
+
+    log "adding nullable videos.analysis_mode column"
+    "${COMPOSE[@]}" exec -T db sh -c \
+      'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' \
+      < "$migration"
+    column_count="$("${COMPOSE[@]}" exec -T db sh -c \
+      'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE" -Nse \
+      "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '\''videos'\'' AND COLUMN_NAME = '\''analysis_mode'\''"')"
+  fi
+
+  [[ "$column_count" == "1" ]] || fail \
+    "videos.analysis_mode migration did not complete"
+}
+
 rollback() {
   local exit_code="$1"
   trap - ERR
@@ -159,6 +209,11 @@ ROLLBACK_REQUIRED=true
 
 COMPOSE=(docker compose -p rallytrack -f "$DEVOPS_DIR/docker-compose.pi.yml" --env-file "$ENV_FILE")
 "${COMPOSE[@]}" config --quiet
+
+if [[ "$COMPONENT" != "frontend" ]]; then
+  wait_for_database
+  ensure_analysis_mode_schema
+fi
 
 case "$COMPONENT" in
   backend)

@@ -18,6 +18,19 @@ jobs:
     name: Validate deployment configuration
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: test-root-password
+          MARIADB_DATABASE: rallytrack
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=12
     steps:
       - uses: actions/checkout@v6
       - name: Validate shell syntax
@@ -26,6 +39,29 @@ jobs:
         run: docker compose -f docker-compose.yml config --quiet
       - name: Validate Pi Compose model
         run: docker compose -f docker-compose.pi.yml --env-file .env.example config --quiet
+      - name: Validate analysis-mode migration and rollback
+        env:
+          DB_CONTAINER: ${{ job.services.mariadb.id }}
+        run: |
+          docker exec "$DB_CONTAINER" mariadb -uroot -ptest-root-password rallytrack -e \
+            "CREATE TABLE videos (video_id BIGINT PRIMARY KEY, title VARCHAR(255)); INSERT INTO videos VALUES (1, 'legacy');"
+          docker exec -i "$DB_CONTAINER" mariadb -uroot -ptest-root-password rallytrack \
+            < db/migrations/20260906_add_video_analysis_mode.sql
+          test "$(docker exec "$DB_CONTAINER" mariadb -uroot -ptest-root-password rallytrack -Nse \
+            "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rallytrack' AND TABLE_NAME='videos' AND COLUMN_NAME='analysis_mode'")" = "1"
+          test "$(docker exec "$DB_CONTAINER" mariadb -uroot -ptest-root-password rallytrack -Nse \
+            "SELECT COUNT(*) FROM videos WHERE video_id=1 AND analysis_mode IS NULL")" = "1"
+          docker exec "$DB_CONTAINER" mariadb -uroot -ptest-root-password rallytrack -e \
+            "INSERT INTO videos VALUES (2, 'pro', 'pro'), (3, 'amateur', 'amateur');"
+          if docker exec "$DB_CONTAINER" mariadb -uroot -ptest-root-password rallytrack -e \
+            "INSERT INTO videos VALUES (4, 'invalid', 'invalid')"; then
+            echo "analysis_mode CHECK constraint accepted an invalid value"
+            exit 1
+          fi
+          docker exec -i "$DB_CONTAINER" mariadb -uroot -ptest-root-password rallytrack \
+            < db/rollback/20260906_drop_video_analysis_mode.sql
+          test "$(docker exec "$DB_CONTAINER" mariadb -uroot -ptest-root-password rallytrack -Nse \
+            "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rallytrack' AND TABLE_NAME='videos' AND COLUMN_NAME='analysis_mode'")" = "0"
 
   deploy:
     name: Deploy Pi configuration
