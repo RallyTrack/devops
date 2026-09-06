@@ -35,6 +35,10 @@ ML 배포는 systemd 상태와 `/health` 응답을 확인해야 성공합니다.
 
 ## 3. GitHub 최초 설정
 
+현재 저장소는 public이고 self-hosted runner가 등록돼 있지 않으므로 CD는 기본적으로 비활성입니다.
+public 저장소의 fork PR이 사설 runner에서 실행될 여지를 만들지 않도록, 저장소를 private으로
+전환하거나 배포 전용 private 저장소/제한된 runner group으로 격리한 뒤 활성화해야 합니다.
+
 각 저장소의 Settings에서 다음을 한 번 설정해야 합니다.
 
 1. `production-pi`, `production-ml` Environment를 만들고 필요한 경우 승인자를 지정합니다.
@@ -43,7 +47,9 @@ ML 배포는 systemd 상태와 `/health` 응답을 확인해야 성공합니다.
    workflow는 `self-hosted, linux, x64, rallytrack-ml`을 요구합니다.
 4. 두 Environment에 `RALLYTRACK_ROOT=/home/junmin/RallyTrack` 변수를 등록합니다. 경로가
    기본값과 같으면 생략해도 됩니다.
-5. 기본 브랜치 보호 규칙에 해당 저장소의 `verify` job을 필수 상태 검사로 지정하고,
+5. 안전한 runner 격리와 Environment 승인 설정을 확인한 뒤 저장소 변수 `ENABLE_CD=true`를
+   등록합니다. 이 값이 없으면 기본 브랜치 CI는 통과하지만 배포 job은 안전하게 skip됩니다.
+6. 기본 브랜치 보호 규칙에 해당 저장소의 `verify` job을 필수 상태 검사로 지정하고,
    직접 push 대신 PR을 요구합니다.
 
 runner 사용자는 Pi에서 GitHub 저장소를 fetch하고 Docker를 실행할 수 있어야 합니다. ML 서버에서는

@@ -29,7 +29,7 @@ jobs:
 
   deploy:
     name: Deploy Pi configuration
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: vars.ENABLE_CD == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: verify
     runs-on: [self-hosted, linux, rallytrack-pi]
     environment: production-pi
