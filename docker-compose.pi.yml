@@ -52,6 +52,7 @@ services:
       retries: 5
 
   backend:
+    image: rallytrack/backend:local
     build: ../backend
     container_name: rally-backend
     environment:
@@ -91,16 +92,24 @@ services:
       retries: 5
 
   frontend:
+    image: rallytrack/frontend:local
     build: ../frontend
     container_name: rally-frontend
     ports:
       - "8082:80"               # LAN 노출: http://<Pi IP>:8082 (도메인 도입 시 host nginx vhost 경유로 전환)
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - rallytrack-net
     mem_limit: 128m
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
 
   # Cloudflare Tunnel replica — Proxmox 호스트의 커넥터가 꺼져도
   # app.rallytrack.win 웹 접속을 Pi 단독으로 유지 (동일 터널, 동일 토큰)

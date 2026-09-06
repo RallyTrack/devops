@@ -1,0 +1,44 @@
+name: DevOps CI/CD
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devops-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  verify:
+    name: Validate deployment configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate shell syntax
+        run: bash -n pi/deploy.sh ml-server/deploy-ai.sh
+      - name: Validate local Compose model
+        run: docker compose -f docker-compose.yml config --quiet
+      - name: Validate Pi Compose model
+        run: docker compose -f docker-compose.pi.yml --env-file .env.example config --quiet
+
+  deploy:
+    name: Deploy Pi configuration
+    if: vars.ENABLE_CD == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: [self-hosted, linux, rallytrack-pi]
+    environment: production-pi
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run the verified deployment script
+        env:
+          CONFIGURED_RALLYTRACK_ROOT: ${{ vars.RALLYTRACK_ROOT }}
+        run: |
+          deployment_root="${CONFIGURED_RALLYTRACK_ROOT:-/home/junmin/RallyTrack}"
+          RALLYTRACK_ROOT="$deployment_root" ./pi/deploy.sh devops "$GITHUB_SHA"

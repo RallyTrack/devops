@@ -28,6 +28,7 @@ RallyTrack 서비스의 **배포 구성 저장소**입니다. 애플리케이션
 | `pi/nginx-rallytrack.conf` | 호스트 nginx vhost 템플릿 (도메인 직접 연결 시 사용) |
 | `ml-server/deploy-ai.sh` | AI 서버 배포 스크립트 |
 | `ml-server/rallytrack-ai.service` | AI 분석 서버 systemd 유닛 템플릿 |
+| `docs/CI-CD.md` | CI 선택 근거, GitHub 설정, 배포·롤백, 서버 규모 트레이드오프 |
 
 `backend` / `frontend` / `aiAnalysis-server` 를 이 저장소와 같은 상위 폴더에 두고 clone해야
 compose의 `build:` 상대 경로와 배포 스크립트가 맞습니다.
@@ -56,6 +57,9 @@ pi/deploy.sh
 ```
 
 상태 확인은 `docker compose -f <compose 파일> ps`, 로그는 `... logs -f backend`.
+
+GitHub Actions 기반 CI/CD 구조와 최초 runner 설정은 [`docs/CI-CD.md`](docs/CI-CD.md)를
+따릅니다. PR에서는 검증만 수행하고, 검증된 기본 브랜치 커밋만 사설 서버 runner가 배포합니다.
 
 ## 환경 변수
 
