@@ -18,7 +18,15 @@ async (page) => {
   await page.waitForFunction(() => [...document.querySelectorAll('video')].every(v=>v.readyState>=2),{},{timeout:15000});
   const playback = await page.evaluate(async () => {
     const videos=[...document.querySelectorAll('video')];
-    for(const v of videos){ await v.play();v.pause();v.currentTime=0.5; }
+    for (const v of videos) {
+      await v.play();
+      v.pause();
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Video seek did not finish')), 10000);
+        v.addEventListener('seeked', () => {clearTimeout(timeout);resolve();}, {once:true});
+        v.currentTime = 0.5;
+      });
+    }
     return videos.map(v=>({width:v.videoWidth,height:v.videoHeight,duration:v.duration}));
   });
   await page.waitForFunction(() => [...document.querySelectorAll('video')].every(v=>!v.seeking && Math.abs(v.currentTime-0.5)<0.05));
