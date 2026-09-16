@@ -72,6 +72,10 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ANALYSIS_CALLBACK_SECRET: ${ANALYSIS_CALLBACK_SECRET}
       SLACK_BACK_WEBHOOK: ${SLACK_BACK_WEBHOOK:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_ENABLED: ${GEMINI_ENABLED:-false}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      MEDIA_FFPROBE: ffprobe
       JAVA_TOOL_OPTIONS: -Xms256m -Xmx768m
     ports:
       - "8080:8080"             # LAN 노출: ml-server의 콜백 수신용 (라우터는 미포워딩)

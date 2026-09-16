@@ -1,0 +1,35 @@
+async (page) => {
+  const urls = __MEDIA_URLS__;
+  await page.goto('http://127.0.0.1:18882');
+  await page.evaluate(() => { localStorage.setItem('safe-origin-marker','present'); localStorage.removeItem('media-executed'); });
+  for (const name of ['legacy.html','legacy.svg']) {
+    const popup = await page.context().newPage();
+    const download = popup.waitForEvent('download', {timeout:10000});
+    await popup.goto(urls[name]).catch(() => {});
+    await download;
+    await popup.close();
+  }
+  await page.setContent('<video id="original" muted controls></video><video id="skeleton" muted></video><video id="minimap" muted></video><iframe id="isolated"></iframe>');
+  for (const id of ['original','skeleton','minimap']) {
+    await page.locator('#'+id).evaluate((element,url) => { element.src=url; element.load(); },urls['sample.mp4']);
+  }
+  await page.waitForFunction(() => [...document.querySelectorAll('video')].every(v=>v.readyState>=2),{},{timeout:15000});
+  const playback = await page.evaluate(async () => {
+    const videos=[...document.querySelectorAll('video')];
+    for(const v of videos){ await v.play();v.pause();v.currentTime=0.5; }
+    return videos.map(v=>({width:v.videoWidth,height:v.videoHeight,duration:v.duration}));
+  });
+  await page.waitForFunction(() => [...document.querySelectorAll('video')].every(v=>!v.seeking && Math.abs(v.currentTime-0.5)<0.05));
+  await page.locator('#isolated').evaluate((el,url)=>{el.src=url;},urls['sample.mp4']);
+  await page.waitForFunction(() => document.querySelector('#isolated').contentWindow !== null);
+  const frame = await page.waitForEvent('framenavigated',{predicate:f=>f.url().includes('/rallytrack-videos/'),timeout:10000}).catch(()=>page.frames().find(f=>f.url().includes('/rallytrack-videos/')));
+  if(!frame) throw new Error('Media frame not loaded');
+  const isolated = await frame.evaluate(() => {try{localStorage.getItem('safe-origin-marker'); return false;}catch(e){return e.name==='SecurityError';}});
+  if(!isolated) throw new Error('Media retained app origin storage access');
+  await frame.waitForFunction(() => document.querySelector('video')?.readyState >= 2, {}, {timeout:10000});
+  await page.locator('#isolated').evaluate((el,url)=>{el.src=url;},urls['disguised.mp4']);
+  await frame.waitForURL(url => url.pathname.endsWith('/disguised.mp4'), {timeout:10000});
+  const marker=await page.evaluate(()=>localStorage.getItem('media-executed'));
+  if(marker!==null) throw new Error('Uploaded marker script ran');
+  await page.evaluate(result => {window.securityMediaResult=result;}, {downloadsBlockedRendering:2,playback,mediaOriginIsolated:isolated,uploadedScriptExecuted:false});
+}

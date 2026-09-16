@@ -1,0 +1,20 @@
+# Isolated synthetic media test stack. Never use the production Compose project.
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: security-fixture
+      MINIO_ROOT_PASSWORD: security-fixture-only-password
+    ports:
+      - "127.0.0.1:19090:9000"
+    tmpfs:
+      - /data
+  backend:
+    image: nginx:alpine
+  frontend:
+    image: rallytrack-security-frontend:20260916
+    build: ../../../frontend
+    depends_on: [minio, backend]
+    ports:
+      - "127.0.0.1:18882:80"
