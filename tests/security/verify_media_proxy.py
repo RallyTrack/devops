@@ -1,6 +1,6 @@
 """Real MinIO + Nginx checks with synthetic credentials and media only; no external packages."""
 from pathlib import Path
-import datetime, hashlib, hmac, json, urllib.parse, urllib.request, urllib.error
+import datetime, hashlib, hmac, json, struct, zlib, urllib.parse, urllib.request, urllib.error
 
 ACCESS = "security-fixture"
 SECRET = "security-fixture-only-password"
@@ -49,7 +49,12 @@ if __name__ == "__main__":
     assert created.status in (200,409), created.status
     clip = (ROOT/"backend/src/test/resources/media/sample.mp4").read_bytes()
     # Uploaded directly to MinIO to represent previously stored, unvalidated objects.
+    def png_chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    thumbnail = (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", struct.pack(">2I5B", 1, 1, 8, 2, 0, 0, 0))
+                 + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\xff")) + png_chunk(b"IEND", b""))
     markers = {
+        "thumbnail.png": (thumbnail, "image/png"),
         "legacy.html": (b"<html><body>safe marker<script>document.body.dataset.executed='yes';localStorage.setItem('media-executed','yes')</script></body></html>","text/html"),
         "legacy.svg": (b'<svg xmlns="http://www.w3.org/2000/svg" onload="document.documentElement.setAttribute(\'data-executed\',\'yes\')"><text y="20">safe marker</text></svg>',"image/svg+xml"),
         "disguised.mp4": (b"<html><script>localStorage.setItem('media-executed','yes')</script></html>","video/mp4"),
@@ -62,7 +67,7 @@ if __name__ == "__main__":
         response=request("GET",PROXY,BUCKET+"/"+name)
         assert response.status==200, (name,response.status,response.read())
         guarded(response)
-        assert response.headers["Content-Disposition"] == ("inline" if mime=="video/mp4" else "attachment")
+        assert response.headers["Content-Disposition"] == ("inline" if mime in ("video/mp4", "image/png") else "attachment")
         response.close()
         urls[name]=sign("GET",PROXY,BUCKET+"/"+name)
     partial=request("GET",PROXY,BUCKET+"/sample.mp4",extra={"Range":"bytes=0-99"})

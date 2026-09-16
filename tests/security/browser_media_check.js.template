@@ -9,7 +9,9 @@ async (page) => {
     await download;
     await popup.close();
   }
-  await page.setContent('<video id="original" muted controls></video><video id="skeleton" muted></video><video id="minimap" muted></video><iframe id="isolated"></iframe>');
+  await page.setContent('<video id="original" muted controls></video><video id="skeleton" muted></video><video id="minimap" muted></video><img id="thumbnail"><iframe id="isolated"></iframe>');
+  await page.locator('#thumbnail').evaluate((element,url)=>{element.src=url;}, urls['thumbnail.png']);
+  await page.waitForFunction(()=>document.querySelector('#thumbnail').naturalWidth === 1);
   for (const id of ['original','skeleton','minimap']) {
     await page.locator('#'+id).evaluate((element,url) => { element.src=url; element.load(); },urls['sample.mp4']);
   }
@@ -26,10 +28,18 @@ async (page) => {
   if(!frame) throw new Error('Media frame not loaded');
   const isolated = await frame.evaluate(() => {try{localStorage.getItem('safe-origin-marker'); return false;}catch(e){return e.name==='SecurityError';}});
   if(!isolated) throw new Error('Media retained app origin storage access');
-  await frame.waitForFunction(() => document.querySelector('video')?.readyState >= 2, {}, {timeout:10000});
+  // WebKit blocks waitForFunction's page-world polling script under CSP sandbox.
+  // Read through the automation world without relaxing the site's policy.
+  let directReady = false;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    directReady = await frame.evaluate(() => document.querySelector('video')?.readyState >= 2);
+    if (directReady) break;
+    await page.waitForTimeout(100);
+  }
+  if (!directReady) throw new Error('Direct media playback failed');
   await page.locator('#isolated').evaluate((el,url)=>{el.src=url;},urls['disguised.mp4']);
   await frame.waitForURL(url => url.pathname.endsWith('/disguised.mp4'), {timeout:10000});
   const marker=await page.evaluate(()=>localStorage.getItem('media-executed'));
   if(marker!==null) throw new Error('Uploaded marker script ran');
-  await page.evaluate(result => {window.securityMediaResult=result;}, {downloadsBlockedRendering:2,playback,mediaOriginIsolated:isolated,uploadedScriptExecuted:false});
+  await page.evaluate(result => {window.securityMediaResult=result;}, {downloadsBlockedRendering:2,thumbnailLoaded:true,playback,mediaOriginIsolated:isolated,uploadedScriptExecuted:false});
 }
